@@ -2,56 +2,55 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const { MongoClient } = require("mongodb");
-const CORS = require("cors");
+const cors = require("cors");
 require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
-  cors: {
-    origin: ["http://localhost:3000", "https://sarathi062.github.io/Streamusic"],
-    methods: ["GET", "POST"]
-  }
-});
 
-
-const url = "mongodb+srv://yashrajdhamale:TwvNr435jG8uSX7b@streamusic.8e50o.mongodb.net/?retryWrites=true&w=majority&appName=Streamusic";
-const client = new MongoClient(url, { useNewUrlParser: true, useUnifiedTopology: true });
-
-let collection;
-
-client.connect().then(() => {
-  console.log("Connected to MongoDB");
-  const db = client.db("Streamusic");
-  collection = db.collection("Queue");
-});
-
-app.use(express.json());
-
+// Configure CORS properly
 const corsOptions = {
   origin: ["http://localhost:3000", "https://sarathi062.github.io/Streamusic"],
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type"],
-  credentials: true
+  credentials: true,
 };
 
-app.use(CORS(corsOptions));
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*"); // Allow all origins (for debugging)
-  res.header("Access-Control-Allow-Methods", "GET, POST");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
-  next();
+app.use(express.json());
+app.use(cors(corsOptions));
+
+// WebSocket setup with CORS
+const io = socketIo(server, {
+  cors: corsOptions
 });
 
+const mongoUrl = process.env.MONGO_URI || "mongodb+srv://yashrajdhamale:TwvNr435jG8uSX7b@streamusic.8e50o.mongodb.net/?retryWrites=true&w=majority&appName=Streamusic";
+const client = new MongoClient(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true });
+
+let collection;
+
+// Connect to MongoDB
+(async () => {
+  try {
+    await client.connect();
+    console.log("Connected to MongoDB");
+    const db = client.db("Streamusic");
+    collection = db.collection("Queue");
+  } catch (error) {
+    console.error("MongoDB connection error:", error);
+  }
+})();
+
+// WebSocket Connection Handling
 io.on("connection", (socket) => {
   console.log("New client connected");
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
+  socket.on("disconnect", (reason) => {
+    console.log("Client disconnected:", reason);
   });
 });
 
-// Get Queue
+// API Endpoints
 app.get("/queue", async (req, res) => {
   try {
     const queue = await collection.find().toArray();
@@ -62,13 +61,12 @@ app.get("/queue", async (req, res) => {
   }
 });
 
-// Add to Queue
 app.post("/queue/add", async (req, res) => {
   const { songs } = req.body;
   try {
     await collection.insertMany(songs);
     const updatedQueue = await collection.find().toArray();
-    io.emit("queueUpdated", updatedQueue); // Emit event to all clients
+    io.emit("queueUpdated", updatedQueue);
     res.status(201).json({ message: "Songs added successfully", queue: updatedQueue });
   } catch (error) {
     console.error("Error adding songs:", error);
@@ -76,18 +74,22 @@ app.post("/queue/add", async (req, res) => {
   }
 });
 
-// Remove from Queue
 app.post("/queue/remove", async (req, res) => {
   const { songId } = req.body;
   try {
     await collection.deleteOne({ id: songId });
     const updatedQueue = await collection.find().toArray();
-    io.emit("queueUpdated", updatedQueue); // Emit event to all clients
+    io.emit("queueUpdated", updatedQueue);
     res.json({ message: "Song removed from queue", queue: updatedQueue });
   } catch (error) {
     console.error("Error removing song:", error);
     res.status(500).json({ message: "Failed to remove song" });
   }
+});
+
+// Keep-alive to prevent Render shutdown
+app.get("/", (req, res) => {
+  res.send("Streamusic Backend is Running...");
 });
 
 const PORT = process.env.PORT || 4000;
