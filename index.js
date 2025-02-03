@@ -9,10 +9,11 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.ORIGIN, // React client URL
+    origin: ["http://localhost:3000", "https://sarathi062.github.io/Streamusic"],
     methods: ["GET", "POST"]
   }
 });
+
 
 const url = "mongodb+srv://yashrajdhamale:TwvNr435jG8uSX7b@streamusic.8e50o.mongodb.net/?retryWrites=true&w=majority&appName=Streamusic";
 const client = new MongoClient(url, { useNewUrlParser: true, useUnifiedTopology: true });
@@ -26,7 +27,21 @@ client.connect().then(() => {
 });
 
 app.use(express.json());
-app.use(CORS());
+
+const corsOptions = {
+  origin: ["http://localhost:3000", "https://sarathi062.github.io/Streamusic"],
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"],
+  credentials: true
+};
+
+app.use(CORS(corsOptions));
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*"); // Allow all origins (for debugging)
+  res.header("Access-Control-Allow-Methods", "GET, POST");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
 
 io.on("connection", (socket) => {
   console.log("New client connected");
