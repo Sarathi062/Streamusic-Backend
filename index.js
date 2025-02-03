@@ -10,7 +10,7 @@ const server = http.createServer(app);
 
 // Configure CORS properly
 const corsOptions = {
-  origin: ["http://localhost:3000", "https://sarathi062.github.io/Streamusic"],
+  origin: ["http://localhost:3000", "https://sarathi062.github.io/Streamusic","https://sarathi062.github.io"],
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type"],
   credentials: true,
