@@ -3,7 +3,7 @@ const {
   adminRegistration,
   Login,
   sendOTP,VerifyOTP
-} = require("../controllers/adminController.js");
+} = require("../controllers/adminController");
 
 const router = express.Router();
 
