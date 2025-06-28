@@ -3,7 +3,7 @@ const {
   AccessToken,
   RefreshToken,
   TrendingSongsPoster
-} = require("../controllers/coreAppController");
+} = require("../controllers/coreappController");
 
 const router = express.Router();
 
