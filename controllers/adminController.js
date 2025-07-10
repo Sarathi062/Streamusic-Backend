@@ -177,6 +177,7 @@ const VerifyOTP = async (req, res) => {
 const Login = async (req, res) => {
   const { mail, password } = req.body;
   try {
+    console.log("Inside Login");
     const user = await AdminModel.findOne({ mail: mail });
     if (!user) {
       return res.status(400).send({ Error: "Admin not found" });
@@ -213,6 +214,7 @@ const Login = async (req, res) => {
 
 const GetAdminCookies = (req, res) => {
   try {
+    console.log("Inside GetAdminCookies");
     const loggedIn = req.cookies.loggedIn === "true";
     const adminLogin = req.cookies.adminLogin === "true";
     if (loggedIn && adminLogin) {
@@ -242,7 +244,7 @@ const GetAdminCookies = (req, res) => {
 const logout = (req, res) => {
   try {
     // Clear the cookies by setting them with empty values and 0 maxAge
-    console.log(1);
+    console.log("Inside logout");
     res.clearCookie("loggedIn", {
       path: "/",
       httpOnly: true,
