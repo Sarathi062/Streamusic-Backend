@@ -190,7 +190,7 @@ const Login = async (req, res) => {
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true, // Server-only access
         secure: true, // Only over HTTPS
-        sameSite: "Strict", // Optional: "Lax" or "Strict"
+        sameSite: "None", // Optional: "Lax" or "Strict"
       });
 
       res.cookie("adminLogin", "true", {
@@ -198,7 +198,7 @@ const Login = async (req, res) => {
         maxAge: 24 * 60 * 60 * 1000,
         httpOnly: true,
         secure: true,
-        sameSite: "Strict",
+        sameSite: "None",
       });
 
       return res.send({ success: "Login Successful" });
@@ -215,7 +215,6 @@ const GetAdminCookies = (req, res) => {
   try {
     const loggedIn = req.cookies.loggedIn === "true";
     const adminLogin = req.cookies.adminLogin === "true";
-    
     if (loggedIn && adminLogin) {
       return res.status(200).json({
         success: true,
