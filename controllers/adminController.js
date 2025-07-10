@@ -41,7 +41,6 @@ const sendOTP = async (req, res) => {
   if (!mail) return res.status(400).json({ message: "Email required" });
 
   const otp = GenerateOtp();
-
   const mailOptions = {
     from: `${gmail}`,
     to: mail,
@@ -143,7 +142,7 @@ const sendOTP = async (req, res) => {
 const VerifyOTP = async (req, res) => {
   const { email, otp } = req.body;
   try {
-    const userOtpEntry = await OTPModel.findOne({ mail: email }); 
+    const userOtpEntry = await OTPModel.findOne({ mail: email });
 
     if (!userOtpEntry) {
       return res.status(400).json({ message: "No OTP found for this email." });
@@ -153,7 +152,7 @@ const VerifyOTP = async (req, res) => {
       userOtpEntry.createdAt.getTime() + 10 * 60 * 1000 < Date.now();
 
     if (isExpired) {
-      await OTPModel.deleteOne({ email }); 
+      await OTPModel.deleteOne({ email });
       return res
         .status(400)
         .json({ message: "OTP has expired. Please request a new one." });
@@ -164,7 +163,7 @@ const VerifyOTP = async (req, res) => {
     }
 
     // OTP is valid and not expired
-    await OTPModel.deleteMany({ email }); 
+    await OTPModel.deleteMany({ email });
 
     return res.status(200).json({ message: "OTP verified successfully." });
   } catch (error) {
@@ -185,39 +184,101 @@ const Login = async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (isMatch) {
-      res.send({ success: "Login Successful" });
-
+      // Set secure, server-only cookies before sending response
       res.cookie("loggedIn", "true", {
         path: "/",
-        maxAge: 6 * 60 * 60 * 1000, // 6 hours in milliseconds
-        secure: false, // send cookie only over HTTPS
-        sameSite: "None", // allow cross-site cookie
-        httpOnly: true, // accessible by JavaScript on client side
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        httpOnly: true, // Server-only access
+        secure: true, // Only over HTTPS
+        sameSite: "Strict", // Optional: "Lax" or "Strict"
       });
 
       res.cookie("adminLogin", "true", {
         path: "/",
-        maxAge: 6 * 60 * 60 * 1000, // 6 hours in milliseconds
-        secure: false, // send cookie only over HTTPS
-        sameSite: "None", // allow cross-site cookie
-        httpOnly: true, // accessible by JavaScript on client side
+        maxAge: 24 * 60 * 60 * 1000,
+        httpOnly: true,
+        secure: true,
+        sameSite: "Strict",
       });
 
-      // document.cookie = `logedIn=true; path=/; max-age=${
-      //   6 * 60 * 60
-      // }; Secure; SameSite=None`;
-      // document.cookie = `adminLogin=true; path=/; max-age=${
-      //   6 * 60 * 60
-      // }; Secure; SameSite=None`;
+      return res.send({ success: "Login Successful" });
     } else {
-      res.status(401).send({ Error: "Invalid Password" });
+      return res.status(401).send({ Error: "Invalid Password" });
     }
   } catch (error) {
-    console.log("User Not Found", error);
-    res.status(500).send({ Error: "Error Logging In" });
+    console.error("Error during login:", error);
+    return res.status(500).send({ Error: "Error Logging In" });
   }
 };
-module.exports = { adminRegistration, Login, VerifyOTP, sendOTP };
+
+const GetAdminCookies = (req, res) => {
+  try {
+    const loggedIn = req.cookies.loggedIn === "true";
+    const adminLogin = req.cookies.adminLogin === "true";
+    
+    if (loggedIn && adminLogin) {
+      return res.status(200).json({
+        success: true,
+        message: "Admin is logged in",
+        loggedIn: true,
+        adminLogin: true,
+      });
+    } else {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized or cookies missing",
+        loggedIn: false,
+        adminLogin: false,
+      });
+    }
+  } catch (error) {
+    console.error("Error checking admin cookies:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+const logout = (req, res) => {
+  try {
+    // Clear the cookies by setting them with empty values and 0 maxAge
+    console.log(1);
+    res.clearCookie("loggedIn", {
+      path: "/",
+      httpOnly: true,
+      sameSite: "None",
+      secure: true, // Use true in production with HTTPS
+    });
+
+    res.clearCookie("adminLogin", {
+      path: "/",
+      httpOnly: true,
+      sameSite: "None",
+      secure: true,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    console.error("Error during logout:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+module.exports = {
+  adminRegistration,
+  Login,
+  VerifyOTP,
+  sendOTP,
+  GetAdminCookies,
+  logout,
+};
 
 //const Queue = require("./src/models/Queue");
 // // // API Endpoints
