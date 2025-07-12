@@ -144,4 +144,44 @@ const TrendingSongsPoster = async (req, res) => {
   throw new Error("No valid API key found");
 };
 
-module.exports = { AccessToken, RefreshToken, TrendingSongsPoster };
+const convertYouTubeDurationToMS = (duration) => {
+  const match = duration.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
+  const minutes = parseInt(match?.[1] || 0);
+  const seconds = parseInt(match?.[2] || 0);
+  return (minutes * 60 + seconds) * 1000;
+};
+
+const TrendingSongs = async (req, res) => {
+  const apiKeys = process.env.YOUTUBEKEY?.split(','); // comma-separated in .env
+
+  if (!apiKeys || apiKeys.length === 0) {
+    return res.status(500).json({ error: "No API keys available." });
+  }
+
+  for (let i = 0; i < apiKeys.length; i++) {
+    const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&chart=mostPopular&regionCode=IN&videoCategoryId=10&key=${apiKeys[i]}&maxResults=10`;
+
+    try {
+      const response = await axios.get(url);
+
+      if (response.status === 200 && response.data.items) {
+        const trending = response.data.items.map((item) => ({
+          id: item.id,
+          title: item.snippet.title,
+          description: item.snippet.description,
+          thumbnail: item.snippet.thumbnails.default.url,
+          channelTitle: item.snippet.channelTitle,
+          duration: convertYouTubeDurationToMS(item.contentDetails.duration),
+        }));
+
+        return res.status(200).json({ trending });
+      }
+    } catch (err) {
+      console.error(`Key ${apiKeys[i]} failed:`, err.response?.data?.error || err.message);
+    }
+  }
+
+  return res.status(500).json({ error: "All API keys failed or quota exceeded." });
+};
+
+module.exports = { AccessToken, RefreshToken, TrendingSongsPoster,TrendingSongs };

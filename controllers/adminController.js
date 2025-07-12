@@ -3,6 +3,8 @@ const { hashPassword, GenerateOtp } = require("../middleware/authMiddleware");
 const bcrypt = require("bcrypt");
 const nodemailer = require("nodemailer");
 const OTPModel = require("../src/models/OTPModel");
+const RoomModel = require("../src/models/RoomModel");
+const mongoose = require("mongoose");
 require("dotenv").config();
 
 const gmail = process.env.GMAIL;
@@ -177,12 +179,12 @@ const VerifyOTP = async (req, res) => {
 const Login = async (req, res) => {
   const { mail, password } = req.body;
   try {
-    console.log("Inside Login");
     const user = await AdminModel.findOne({ mail: mail });
     if (!user) {
       return res.status(400).send({ Error: "Admin not found" });
     }
 
+    const userID = user._id.toString();
     const isMatch = await bcrypt.compare(password, user.password);
     if (isMatch) {
       // Set secure, server-only cookies before sending response
@@ -202,6 +204,14 @@ const Login = async (req, res) => {
         sameSite: "None",
       });
 
+      res.cookie("adminID", userID, {
+        path: "/",
+        maxAge: 24 * 60 * 60 * 1000,
+        httpOnly: true,
+        secure: true,
+        sameSite: "None",
+      });
+
       return res.send({ success: "Login Successful" });
     } else {
       return res.status(401).send({ Error: "Invalid Password" });
@@ -214,7 +224,6 @@ const Login = async (req, res) => {
 
 const GetAdminCookies = (req, res) => {
   try {
-    console.log("Inside GetAdminCookies");
     const loggedIn = req.cookies.loggedIn === "true";
     const adminLogin = req.cookies.adminLogin === "true";
     if (loggedIn && adminLogin) {
@@ -244,7 +253,6 @@ const GetAdminCookies = (req, res) => {
 const logout = (req, res) => {
   try {
     // Clear the cookies by setting them with empty values and 0 maxAge
-    console.log("Inside logout");
     res.clearCookie("loggedIn", {
       path: "/",
       httpOnly: true,
@@ -253,6 +261,12 @@ const logout = (req, res) => {
     });
 
     res.clearCookie("adminLogin", {
+      path: "/",
+      httpOnly: true,
+      sameSite: "None",
+      secure: true,
+    });
+    res.clearCookie("adminID", {
       path: "/",
       httpOnly: true,
       sameSite: "None",
@@ -272,6 +286,84 @@ const logout = (req, res) => {
   }
 };
 
+const createRoom = async (req, res) => {
+  try {
+    const { adminID } = req.cookies;
+    if (!adminID || !mongoose.Types.ObjectId.isValid(adminID)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid admin ID" });
+    }
+
+    // Generate a new 6-character alphanumeric room code
+    const generateRoomCode = () =>
+      Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    let room = await RoomModel.findOne({ adminId: adminID });
+
+    if (!room) {
+      // Create new room if it doesn't exist
+      const newRoom = new RoomModel({
+        adminId: adminID,
+        roomCode: generateRoomCode(),
+        songs: [],
+      });
+
+      room = await newRoom.save();
+    } else {
+      // Update roomCode if room already exists
+      room.roomCode = generateRoomCode();
+      await room.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      roomId: room._id,
+      roomCode: room.roomCode,
+    });
+  } catch (error) {
+    console.error("Error creating/updating room:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+const getRoomCode = async (req, res) => {
+  try {
+    const { adminID } = req.cookies;
+
+    if (!adminID || !mongoose.Types.ObjectId.isValid(adminID)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or missing admin ID",
+      });
+    }
+
+    const room = await RoomModel.findOne({ adminId: adminID });
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: "Room not found for the given admin",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      roomCode: room.roomCode,
+      roomId: room._id,
+    });
+  } catch (error) {
+    console.error("Error fetching room code:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 module.exports = {
   adminRegistration,
   Login,
@@ -279,6 +371,8 @@ module.exports = {
   sendOTP,
   GetAdminCookies,
   logout,
+  createRoom,
+  getRoomCode,
 };
 
 //const Queue = require("./src/models/Queue");
