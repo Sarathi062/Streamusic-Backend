@@ -124,7 +124,6 @@ const TrendingSongsPoster = async (req, res) => {
       );
       // console.log(typeof response); // js object
       if (response.status === 200 && response.data) {
-        
         const items = response.data.items;
 
         const Posters = items.map((item) => ({
@@ -152,7 +151,7 @@ const convertYouTubeDurationToMS = (duration) => {
 };
 
 const TrendingSongs = async (req, res) => {
-  const apiKeys = process.env.YOUTUBEKEY?.split(','); // comma-separated in .env
+  const apiKeys = process.env.YOUTUBEKEY?.split(","); // comma-separated in .env
 
   if (!apiKeys || apiKeys.length === 0) {
     return res.status(500).json({ error: "No API keys available." });
@@ -177,11 +176,69 @@ const TrendingSongs = async (req, res) => {
         return res.status(200).json({ trending });
       }
     } catch (err) {
-      console.error(`Key ${apiKeys[i]} failed:`, err.response?.data?.error || err.message);
+      console.error(
+        `Key ${apiKeys[i]} failed:`,
+        err.response?.data?.error || err.message
+      );
     }
   }
 
-  return res.status(500).json({ error: "All API keys failed or quota exceeded." });
+  return res
+    .status(500)
+    .json({ error: "All API keys failed or quota exceeded." });
 };
 
-module.exports = { AccessToken, RefreshToken, TrendingSongsPoster,TrendingSongs };
+const SearchSongs = async (req, res) => {
+  const { query } = req.query;
+  const apiKeys = process.env.YOUTUBEKEY?.split(",");
+
+  if (!apiKeys || apiKeys.length === 0) {
+    return res.status(500).json({ error: "No API keys available." });
+  }
+
+  if (!query || query.trim() === "") {
+    return res.status(400).json({ error: "Search query is required." });
+  }
+
+  // Bias the query to return song-like content
+  const modifiedQuery = `${query} song`;
+
+  for (let i = 0; i < apiKeys.length; i++) {
+    const url = `${process.env.YOUTUBE_SEARCH}${encodeURIComponent(
+      modifiedQuery
+    )}&type=video&videoCategoryId=10&key=${apiKeys[i]}&regionCode=IN`;
+
+    try {
+      const response = await axios.get(url);
+
+      if (response.status === 200 && response.data.items) {
+        const searchResults = response.data.items.map((item) => ({
+          id: item.id.videoId,
+          title: item.snippet.title,
+          description: item.snippet.description,
+          thumbnail: item.snippet.thumbnails.default.url,
+          channelTitle: item.snippet.channelTitle,
+        }));
+
+        return res.status(200).json({ searchResults });
+      }
+    } catch (err) {
+      console.error(
+        `Key ${apiKeys[i]} failed:`,
+        err.response?.data?.error || err.message
+      );
+    }
+  }
+
+  return res
+    .status(500)
+    .json({ error: "All API keys failed or quota exceeded." });
+};
+
+module.exports = {
+  AccessToken,
+  RefreshToken,
+  TrendingSongsPoster,
+  TrendingSongs,
+  SearchSongs,
+};
