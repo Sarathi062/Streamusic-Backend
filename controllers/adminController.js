@@ -178,44 +178,66 @@ const VerifyOTP = async (req, res) => {
 
 const Login = async (req, res) => {
   const { mail, password } = req.body;
+
   try {
-    const user = await AdminModel.findOne({ mail: mail });
+    const user = await AdminModel.findOne({ mail });
     if (!user) {
       return res.status(400).send({ Error: "Admin not found" });
     }
 
     const userID = user._id.toString();
     const isMatch = await bcrypt.compare(password, user.password);
-    if (isMatch) {
-      // Set secure, server-only cookies before sending response
-      res.cookie("loggedIn", "true", {
-        path: "/",
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        httpOnly: true, // Server-only access
-        secure: true, // Only over HTTPS
-        sameSite: "None", // Optional: "Lax" or "Strict"
-      });
 
-      res.cookie("adminLogin", "true", {
-        path: "/",
-        maxAge: 24 * 60 * 60 * 1000,
-        httpOnly: true,
-        secure: true,
-        sameSite: "None",
-      });
-
-      res.cookie("adminID", userID, {
-        path: "/",
-        maxAge: 24 * 60 * 60 * 1000,
-        httpOnly: true,
-        secure: true,
-        sameSite: "None",
-      });
-
-      return res.send({ success: "Login Successful" });
-    } else {
+    if (!isMatch) {
       return res.status(401).send({ Error: "Invalid Password" });
     }
+
+    // Set cookies
+    res.cookie("loggedIn", "true", {
+      path: "/",
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    });
+
+    res.cookie("adminLogin", "true", {
+      path: "/",
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    });
+
+    res.cookie("adminID", userID, {
+      path: "/",
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    });
+
+    const generateRoomCode = () =>
+      Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    let room = await RoomModel.findOne({ adminId: userID });
+
+    if (!room) {
+      room = await new RoomModel({
+        adminId: userID,
+        roomCode: generateRoomCode(),
+        songs: [],
+      }).save();
+    }
+
+    res.cookie("roomCode", room.roomCode, {
+      path: "/",
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    });
+
+    return res.send({ success: "Login Successful", roomCode: room.roomCode });
   } catch (error) {
     console.error("Error during login:", error);
     return res.status(500).send({ Error: "Error Logging In" });
@@ -272,6 +294,12 @@ const logout = (req, res) => {
       sameSite: "None",
       secure: true,
     });
+    res.clearCookie("roomCode", {
+      path: "/",
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    });
 
     return res.status(200).json({
       success: true,
@@ -301,20 +329,29 @@ const createRoom = async (req, res) => {
 
     let room = await RoomModel.findOne({ adminId: adminID });
 
+    const newRoomCode = generateRoomCode();
+
     if (!room) {
       // Create new room if it doesn't exist
       const newRoom = new RoomModel({
         adminId: adminID,
-        roomCode: generateRoomCode(),
+        roomCode: newRoomCode,
         songs: [],
       });
 
       room = await newRoom.save();
     } else {
-      // Update roomCode if room already exists
-      room.roomCode = generateRoomCode();
+      room.roomCode = newRoomCode;
       await room.save();
     }
+
+    // ✅ Set or reset cookie in both cases
+    res.cookie("roomCode", room.roomCode, {
+      path: "/",
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    });
 
     return res.status(200).json({
       success: true,
@@ -332,37 +369,72 @@ const createRoom = async (req, res) => {
 
 const getRoomCode = async (req, res) => {
   try {
-    const { adminID } = req.cookies;
+    const { roomCode } = req.cookies;
 
-    if (!adminID || !mongoose.Types.ObjectId.isValid(adminID)) {
+    if (!roomCode) {
       return res.status(400).json({
         success: false,
-        message: "Invalid or missing admin ID",
-      });
-    }
-
-    const room = await RoomModel.findOne({ adminId: adminID });
-
-    if (!room) {
-      return res.status(404).json({
-        success: false,
-        message: "Room not found for the given admin",
+        message: "Room code is missing in cookies",
       });
     }
 
     return res.status(200).json({
       success: true,
-      roomCode: room.roomCode,
-      roomId: room._id,
+      roomCode: roomCode, // already from cookie
     });
   } catch (error) {
-    console.error("Error fetching room code:", error);
+    console.error("Error fetching room code from cookies:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
     });
   }
 };
+
+const addSong = async (req, res) => {
+  try {
+    const { songs } = req.body; // now expecting songs array
+
+    const rawRoomCode =
+      req.body.roomCode || req.query.roomCode || req.cookies.roomCode;
+    const roomCode = rawRoomCode?.trim().toUpperCase();
+
+    if (!roomCode) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing room code in cookies" });
+    }
+
+    const room = await RoomModel.findOne({ roomCode: roomCode });
+
+    if (!room) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Room not found" });
+    }
+
+    // Validate that songs is an array
+    if (!Array.isArray(songs) || songs.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No songs provided" });
+    }
+
+    // Add all new songs
+    room.songs.push(...songs); // spread to add multiple
+
+    await room.save();
+
+    res
+      .status(200)
+      .json({ success: true, message: "Songs added", songs: room.songs });
+  } catch (err) {
+    console.error("Error in addSong:", err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+const removeSong = async (req, res) => {};
 
 module.exports = {
   adminRegistration,
@@ -373,6 +445,8 @@ module.exports = {
   logout,
   createRoom,
   getRoomCode,
+  addSong,
+  removeSong,
 };
 
 //const Queue = require("./src/models/Queue");

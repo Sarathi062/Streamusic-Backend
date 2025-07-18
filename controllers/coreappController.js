@@ -201,12 +201,12 @@ const SearchSongs = async (req, res) => {
   }
 
   // Bias the query to return song-like content
-  const modifiedQuery = `${query} song`;
+  const modifiedQuery = query + " official music video";
 
   for (let i = 0; i < apiKeys.length; i++) {
-    const url = `${process.env.YOUTUBE_SEARCH}${encodeURIComponent(
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&type=video&videoCategoryId=10&order=viewCount&q=${encodeURIComponent(
       modifiedQuery
-    )}&type=video&videoCategoryId=10&key=${apiKeys[i]}&regionCode=IN`;
+    )}&key=${apiKeys[i]}&regionCode=IN`;
 
     try {
       const response = await axios.get(url);
