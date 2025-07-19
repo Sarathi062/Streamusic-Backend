@@ -342,6 +342,7 @@ const createRoom = async (req, res) => {
       room = await newRoom.save();
     } else {
       room.roomCode = newRoomCode;
+      room.songs = [];
       await room.save();
     }
 
